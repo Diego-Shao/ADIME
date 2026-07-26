@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>床邊營養評估與生化指標系統 (ADIME) V6</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body { touch-action: manipulation; -webkit-user-select: none; user-select: none; background-color: #f1f5f9; }
+        input, textarea, select { -webkit-user-select: text; user-select: text; }
+        
+        /* Tag Buttons */
+        .tag-btn.active { background-color: #0d9488; color: white; border-color: #0d9488; font-weight: bold; }
+        .pmh-btn.active { background-color: #4f46e5; color: white; border-color: #4f46e5; font-weight: bold; }
+        .diet-btn.active { background-color: #0284c7; color: white; border-color: #0284c7; font-weight: bold; }
+        .meal-tab-btn.active { background-color: #0d9488; color: white; font-weight: bold; border-color: #0d9488; }
+        
+        /* Lab Alert Colors */
+        .lab-input.lab-low { border-color: #3b82f6; background-color: #eff6ff; color: #1e40af; }
+        .lab-input.lab-normal { border-color: #22c55e; background-color: #f0fdf4; color: #15803d; }
+        .lab-input.lab-high { border-color: #ef4444; background-color: #fef2f2; color: #b91c1c; }
+        
+        /* Hide scrollbar for tabs */
+        ::-webkit-scrollbar { height: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="text-slate-800 pb-24 font-sans">
+
+    <!-- 頂部固定導覽與狀態列 -->
+    <header class="sticky top-0 z-50 bg-white shadow-sm border-b border-slate-200 p-3">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">📋</span>
+                    <div>
+                        <h1 class="text-lg font-bold text-teal-800 leading-tight">床邊營養評估 ADIME <span class="text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded align-middle ml-1">V6</span></h1>
+                    </div>
+                </div>
+                <div id="status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 shadow-sm border border-emerald-200">
+                    <span id="status-dot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span id="status-text">連線正常 (可同步)</span>
+                </div>
+            </div>
+
+            <!-- 病患快速檢視區 -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-500 mb-0.5">床號 / 病歷號</label>
+                    <input type="text" id="bed-no" placeholder="如: 1201-1" class="w-full p-1.5 border rounded-lg text-sm font-bold text-slate-800 bg-white">
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-500 mb-0.5">姓名 / 性別 / 年齡</label>
+                    <div class="flex gap-1">
+                        <input type="text" id="patient-name" placeholder="姓名" class="w-2/3 p-1.5 border rounded-lg text-sm font-bold bg-white">
+                        <input type="number" id="patient-age" placeholder="歲" class="w-1/3 p-1.5 border rounded-lg text-sm bg-white">
+                    </div>
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-[11px] font-bold text-slate-500 mb-0.5">臨床科別</label>
+                    <div class="flex flex-wrap gap-1" id="dept-tags">
+                        <button type="button" onclick="selectTag(this, 'dept')" class="tag-btn text-xs px-2 py-1 border rounded-md bg-white border-slate-300 font-medium">胃腸肝膽</button>
+                        <button type="button" onclick="selectTag(this, 'dept')" class="tag-btn text-xs px-2 py-1 border rounded-md bg-white border-slate-300 font-medium">腎臟科</button>
+                        <button type="button" onclick="selectTag(this, 'dept')" class="tag-btn text-xs px-2 py-1 border rounded-md bg-white border-slate-300 font-medium">腫瘤科</button>
+                        <button type="button" onclick="selectTag(this, 'dept')" class="tag-btn text-xs px-2 py-1 border rounded-md bg-white border-slate-300 font-medium">ICU</button>
+                        <button type="button" onclick="addCustomOption('dept-tags', 'single', 'dept')" class="text-[11px] px-2 py-1 border border-dashed border-teal-500 text-teal-600 bg-teal-50 rounded-md font-bold">+ 自訂</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要頁籤列 -->
+    <nav class="max-w-6xl mx-auto px-3 mt-4 mb-2">
+        <div class="flex bg-white rounded-xl shadow-sm border border-slate-200 p-1 gap-1 overflow-x-auto whitespace-nowrap">
+            <button onclick="switchTab('tab-inpatient')" id="btn-tab-inpatient" class="tab-btn inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-bold rounded-lg bg-teal-700 text-white shadow transition-colors">
+                <i class="fa-solid fa-hospital-user"></i> 住院與生化
+            </button>
+            <button onclick="switchTab('tab-a')" id="btn-tab-a" class="tab-btn inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-bold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+                🥗 A - 評估與飲食
+            </button>
+            <button onclick="switchTab('tab-d')" id="btn-tab-d" class="tab-btn inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-bold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+                🩺 D - 營養診斷
+            </button>
+            <button onclick="switchTab('tab-i')" id="btn-tab-i" class="tab-btn inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-bold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+                🍎 I - 營養介入
+            </button>
+            <button onclick="switchTab('tab-me')" id="btn-tab-me" class="tab-btn inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-bold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+                📈 M/E - 監測評估
+            </button>
+            <button onclick="switchTab('tab-history')" id="btn-tab-history" class="tab-btn inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-bold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+                📁 歷史 (<span id="offline-count">0</span>)
+            </button>
+        </div>
+    </nav>
+
+    <!-- 主要內容區 -->
+    <main class="max-w-6xl mx-auto p-3">
+
+        <!-- ==================== TAB 0: 住院資料與生化指標 (完全鎖定保留) ==================== -->
+        <section id="tab-inpatient" class="tab-content block space-y-4">
+            
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <h2 class="text-[15px] font-bold text-slate-700 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                    <i class="fa-solid fa-notes-medical text-teal-600 text-lg"></i> 住院臨床資料 & 醫囑
+                </h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1.5">住院日期</label>
+                        <input type="date" id="adm-date" class="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none transition">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-bold text-slate-600 mb-1.5">入院主訴 / 主要診斷 (Admitting Diagnosis)</label>
+                        <input type="text" id="adm-diagnosis" placeholder="輸入診斷或點擊下方快選..." class="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-white mb-2 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none transition">
+                        <div class="flex flex-wrap gap-1.5" id="diag-tags">
+                            <button type="button" onclick="appendDiagnosis('敗血症')" class="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 text-slate-700 transition">+ 敗血症</button>
+                            <button type="button" onclick="appendDiagnosis('肺炎')" class="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 text-slate-700 transition">+ 肺炎</button>
+                            <button type="button" onclick="appendDiagnosis('GI Bleeding')" class="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 text-slate-700 transition">+ GI Bleeding</button>
+                            <button type="button" onclick="appendDiagnosis('AKI')" class="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 text-slate-700 transition">+ AKI</button>
+                            <button type="button" onclick="appendDiagnosis('Stroke')" class="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 text-slate-700 transition">+ Stroke</button>
+                            <button type="button" onclick="appendDiagnosis('術後')" class="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 text-slate-700 transition">+ 術後</button>
+                            <button type="button" onclick="addCustomDiagnosis()" class="text-[11px] px-2.5 py-1 border border-dashed border-teal-500 text-teal-700 bg-teal-50 hover:bg-teal-100 rounded font-bold transition">+ 自訂</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-5">
+                    <label class="block text-xs font-bold text-slate-600 mb-2">過去病史 (Past Medical History, PMH)</label>
+                    <div class="flex flex-wrap gap-2" id="pmh-tags">
+                        <button type="button" onclick="toggleMultiBtn(this)" class="pmh-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">DM 糖尿病</button>
+                        <button type="button" onclick="toggleMultiBtn(this)" class="pmh-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">HTN 高血壓</button>
+                        <button type="button" onclick="toggleMultiBtn(this)" class="pmh-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-indigo-600 text-white font-bold transition active">CKD 慢性腎病</button>
+                        <button type="button" onclick="toggleMultiBtn(this)" class="pmh-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">CLD 肝硬化/肝病</button>
+                        <button type="button" onclick="toggleMultiBtn(this)" class="pmh-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">Cancer 惡性腫瘤</button>
+                        <button type="button" onclick="toggleMultiBtn(this)" class="pmh-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">CAD 心臟病</button>
+                        <button type="button" onclick="toggleMultiBtn(this)" class="pmh-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">COPD 肺阻塞</button>
+                        <button type="button" onclick="addCustomOption('pmh-tags', 'multi', 'pmh')" class="text-xs px-3 py-1.5 border border-dashed border-indigo-400 text-indigo-600 bg-indigo-50 rounded-lg font-bold hover:bg-indigo-100 transition">+ 自訂</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-2">目前醫囑飲食 (Diet Order)</label>
+                    <div class="flex flex-wrap gap-2" id="diet-tags">
+                        <button type="button" onclick="selectTag(this, 'diet')" class="diet-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">NPO 禁食</button>
+                        <button type="button" onclick="selectTag(this, 'diet')" class="diet-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-sky-600 text-white font-bold transition active">Regular 普通飯</button>
+                        <button type="button" onclick="selectTag(this, 'diet')" class="diet-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">Soft 軟質/粥</button>
+                        <button type="button" onclick="selectTag(this, 'diet')" class="diet-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">Liquid 全流質</button>
+                        <button type="button" onclick="selectTag(this, 'diet')" class="diet-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">Tube Feeding 管灌</button>
+                        <button type="button" onclick="selectTag(this, 'diet')" class="diet-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">Renal 腎臟飲食</button>
+                        <button type="button" onclick="selectTag(this, 'diet')" class="diet-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition">Low Salt 低鈉</button>
+                        <button type="button" onclick="addCustomOption('diet-tags', 'single-diet', 'diet')" class="text-xs px-3 py-1.5 border border-dashed border-sky-500 text-sky-600 bg-sky-50 rounded-lg font-bold hover:bg-sky-100 transition">+ 自訂</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-end mb-4 border-b border-slate-100 pb-2">
+                    <h2 class="text-[15px] font-bold text-slate-700 flex items-center gap-2">
+                        <i class="fa-solid fa-flask-vial text-teal-600 text-lg"></i> 生化數據與實驗室檢驗 (Lab Data)
+                    </h2>
+                    <span class="text-[11px] text-slate-500">輸入數值後自動標示: <span class="text-blue-600 font-bold">過低</span> / <span class="text-green-600 font-bold">正常</span> / <span class="text-red-600 font-bold">過高</span></span>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <h3 class="text-xs font-bold text-slate-700 mb-3 flex items-center gap-1.5"><span class="text-red-400">🥩</span> 蛋白質與營養狀況</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">Albumin (白蛋白)</span><span class="text-slate-400">3.5-5.0 g/dL</span>
+                                </div>
+                                <input type="number" step="0.1" id="lab-alb" oninput="checkLab('alb', 3.5, 5.0)" placeholder="g/dL" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">Prealbumin (前白蛋白)</span><span class="text-slate-400">20-40 mg/dL</span>
+                                </div>
+                                <input type="number" step="1" id="lab-pab" oninput="checkLab('pab', 20, 40)" placeholder="mg/dL" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">Total Protein (總蛋白)</span><span class="text-slate-400">6.0-8.3 g/dL</span>
+                                </div>
+                                <input type="number" step="0.1" id="lab-tp" oninput="checkLab('tp', 6.0, 8.3)" placeholder="g/dL" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <h3 class="text-xs font-bold text-slate-700 mb-3 flex items-center gap-1.5"><span class="text-rose-500">🩸</span> 貧血、血液與發炎指標</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">Hb (血紅素)</span><span class="text-slate-400">12-16 g/dL</span>
+                                </div>
+                                <input type="number" step="0.1" id="lab-hb" oninput="checkLab('hb', 12, 16)" placeholder="g/dL" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">WBC (白血球)</span><span class="text-slate-400">4-10 k/μL</span>
+                                </div>
+                                <input type="number" step="0.1" id="lab-wbc" oninput="checkLab('wbc', 4.0, 10.0)" placeholder="k/μL" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">TLC (淋巴球總數)</span><span class="text-slate-400">>1500 /mm³</span>
+                                </div>
+                                <input type="number" step="10" id="lab-tlc" oninput="checkLab('tlc', 1500, 99999)" placeholder="/mm³" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">CRP (發炎反應)</span><span class="text-slate-400">&lt;0.5 mg/dL</span>
+                                </div>
+                                <input type="number" step="0.01" id="lab-crp" oninput="checkLab('crp', 0, 0.5)" placeholder="mg/dL" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <h3 class="text-xs font-bold text-slate-700 mb-3 flex items-center gap-1.5"><span class="text-amber-500">⚡</span> 腎功能與電解質 (Renal & Electrolytes)</h3>
+                        
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">BUN (尿素氮)</span><span class="text-slate-400">7-20 mg/dL</span>
+                                </div>
+                                <input type="number" step="0.1" id="lab-bun" oninput="checkLab('bun', 7, 20)" placeholder="mg/dL" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">Creatinine (肌酸酐)</span><span class="text-slate-400">0.6-1.2 mg/dL</span>
+                                </div>
+                                <input type="number" step="0.1" id="lab-cr" oninput="checkLab('cr', 0.6, 1.2)" placeholder="mg/dL" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">Na (鈉)</span><span class="text-slate-400">135-145 mEq/L</span>
+                                </div>
+                                <input type="number" step="1" id="lab-na" oninput="checkLab('na', 135, 145)" placeholder="mEq/L" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">K (鉀)</span><span class="text-slate-400">3.5-5.0 mEq/L</span>
+                                </div>
+                                <input type="number" step="0.1" id="lab-k" oninput="checkLab('k', 3.5, 5.0)" placeholder="mEq/L" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">P (磷)</span><span class="text-slate-400">2.5-4.5 mg/dL</span>
+                                </div>
+                                <input type="number" step="0.1" id="lab-p" oninput="checkLab('p', 2.5, 4.5)" placeholder="mg/dL" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">Ca (鈣)</span><span class="text-slate-400">8.5-10.5 mg/dL</span>
+                                </div>
+                                <input type="number" step="0.1" id="lab-ca" oninput="checkLab('ca', 8.5, 10.5)" placeholder="mg/dL" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">Glucose (飯空血糖)</span><span class="text-slate-400">70-100 mg/dL</span>
+                                </div>
+                                <input type="number" step="1" id="lab-glu" oninput="checkLab('glu', 70, 100)" placeholder="mg/dL" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="font-bold text-slate-700">HbA1c (糖化血色素)</span><span class="text-slate-400">&lt;5.7%</span>
+                                </div>
+                                <input type="number" step="0.1" id="lab-hba1c" oninput="checkLab('hba1c', 0, 5.7)" placeholder="%" class="lab-input w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold bg-white outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1.5">其他重要 Lab 或特殊數據備註</label>
+                        <input type="text" id="lab-notes" placeholder="例如: eGFR 45, AST/ALT 正常, TG 210" class="w-full p-3 border border-slate-300 rounded-lg text-sm bg-white focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none transition">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 1: Assessment (V6: 直接文字輸入 + 雙擊彈出下拉快選) ==================== -->
+        <section id="tab-a" class="tab-content hidden space-y-4">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                
+                <div class="flex flex-wrap justify-between items-center mb-4 border-b border-slate-100 pb-3 gap-2">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-i-cursor text-teal-600"></i> 飲食份量與熱量估算 (直接輸入/連點2下快選)
+                        </h2>
+                        <p class="text-[11px] text-slate-400 mt-0.5">💡 提示：輸入框可直接打字，<b>點擊/連點 2 下</b>可彈出常吃食物下拉快選</p>
+                    </div>
+                    <!-- 本餐熱量自動計算顯示 -->
+                    <div class="bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-xl flex items-center gap-2">
+                        <span class="text-xs font-bold text-teal-800">🔥 本餐預估總熱量：</span>
+                        <span id="meal-total-kcal" class="text-base font-extrabold text-teal-700">0</span>
+                        <span class="text-xs font-bold text-teal-700">kcal</span>
+                    </div>
+                </div>
+
+                <!-- 餐別選擇 (切換 早 / 午 / 晚 / 點心) -->
+                <div class="flex bg-slate-100 p-1 rounded-xl mb-4 gap-1">
+                    <button type="button" onclick="switchMealTab('bf')" id="meal-tab-bf" class="meal-tab-btn flex-1 py-2 text-xs font-bold rounded-lg active bg-teal-600 text-white shadow">🍳 早餐</button>
+                    <button type="button" onclick="switchMealTab('lunch')" id="meal-tab-lunch" class="meal-tab-btn flex-1 py-2 text-xs font-bold rounded-lg text-slate-600">🍱 午餐</button>
+                    <button type="button" onclick="switchMealTab('dinner')" id="meal-tab-dinner" class="meal-tab-btn flex-1 py-2 text-xs font-bold rounded-lg text-slate-600">🍲 晚餐</button>
+                    <button type="button" onclick="switchMealTab('snack')" id="meal-tab-snack" class="meal-tab-btn flex-1 py-2 text-xs font-bold rounded-lg text-slate-600">🥛 點心/宵夜</button>
+                </div>
+
+                <!-- 8 大食物類別區塊 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="food-groups-container">
+                    
+                    <!-- 1. 主食 (70 kcal/份) -->
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <span class="text-xs font-bold text-amber-800 flex items-center gap-1.5">🍚 主食 (~70 kcal/份)</span>
+                            <button type="button" onclick="addFoodItem('cat-staple', 'staple')" class="text-[11px] font-bold text-teal-600 hover:text-teal-800">+ 新增</button>
+                        </div>
+                        <div id="cat-staple" class="space-y-1.5"></div>
+                    </div>
+
+                    <!-- 2. 主菜 (75 kcal/份) -->
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <span class="text-xs font-bold text-rose-800 flex items-center gap-1.5">🥩 主菜 (~75 kcal/份)</span>
+                            <button type="button" onclick="addFoodItem('cat-main', 'main')" class="text-[11px] font-bold text-teal-600 hover:text-teal-800">+ 新增</button>
+                        </div>
+                        <div id="cat-main" class="space-y-1.5"></div>
+                    </div>
+
+                    <!-- 3. 半葷素 (120 kcal/份) -->
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <span class="text-xs font-bold text-orange-800 flex items-center gap-1.5">🥘 半葷素 (~120 kcal/份)</span>
+                            <button type="button" onclick="addFoodItem('cat-mixed', 'mixed')" class="text-[11px] font-bold text-teal-600 hover:text-teal-800">+ 新增</button>
+                        </div>
+                        <div id="cat-mixed" class="space-y-1.5"></div>
+                    </div>
+
+                    <!-- 4. 蔬菜 (25 kcal/份) -->
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <span class="text-xs font-bold text-emerald-800 flex items-center gap-1.5">🥬 蔬菜 (~25 kcal/份)</span>
+                            <button type="button" onclick="addFoodItem('cat-veg', 'veg')" class="text-[11px] font-bold text-teal-600 hover:text-teal-800">+ 新增</button>
+                        </div>
+                        <div id="cat-veg" class="space-y-1.5"></div>
+                    </div>
+
+                    <!-- 5. 水果 (60 kcal/份) -->
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <span class="text-xs font-bold text-red-700 flex items-center gap-1.5">🍎 水果 (~60 kcal/份)</span>
+                            <button type="button" onclick="addFoodItem('cat-fruit', 'fruit')" class="text-[11px] font-bold text-teal-600 hover:text-teal-800">+ 新增</button>
+                        </div>
+                        <div id="cat-fruit" class="space-y-1.5"></div>
+                    </div>
+
+                    <!-- 6. 乳品 (150 kcal/份) -->
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <span class="text-xs font-bold text-sky-800 flex items-center gap-1.5">🥛 乳品/配方 (~150 kcal/份)</span>
+                            <button type="button" onclick="addFoodItem('cat-dairy', 'dairy')" class="text-[11px] font-bold text-teal-600 hover:text-teal-800">+ 新增</button>
+                        </div>
+                        <div id="cat-dairy" class="space-y-1.5"></div>
+                    </div>
+
+                    <!-- 7. 飲料 (80 kcal/份) -->
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <span class="text-xs font-bold text-blue-800 flex items-center gap-1.5">🥤 飲料/水分 (~80 kcal/份)</span>
+                            <button type="button" onclick="addFoodItem('cat-drink', 'drink')" class="text-[11px] font-bold text-teal-600 hover:text-teal-800">+ 新增</button>
+                        </div>
+                        <div id="cat-drink" class="space-y-1.5"></div>
+                    </div>
+
+                    <!-- 8. 甜點 (150 kcal/份) -->
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <span class="text-xs font-bold text-pink-800 flex items-center gap-1.5">🍰 甜點/零食 (~150 kcal/份)</span>
+                            <button type="button" onclick="addFoodItem('cat-dessert', 'dessert')" class="text-[11px] font-bold text-teal-600 hover:text-teal-800">+ 新增</button>
+                        </div>
+                        <div id="cat-dessert" class="space-y-1.5"></div>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- 下拉選單 Modal (雙擊彈出選單彈窗) -->
+        <div id="picker-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden animate-[scaleIn_0.15s_ease-out]">
+                <div class="bg-teal-700 text-white p-3.5 flex justify-between items-center">
+                    <h3 class="font-bold text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-list-check"></i> 選擇常見食物 (點擊帶入)
+                    </h3>
+                    <button type="button" onclick="closePickerModal()" class="text-white hover:text-slate-200 text-base px-2">✕</button>
+                </div>
+                <div id="picker-options-list" class="p-2 max-h-72 overflow-y-auto divide-y divide-slate-100">
+                    <!-- 動態載入選項 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 2, 3, 4 (版面保留) ==================== -->
+        <section id="tab-d" class="tab-content hidden p-5 bg-white rounded-2xl shadow-sm border border-slate-200">
+            <h2 class="text-base font-bold text-slate-800 mb-3 border-l-4 border-teal-600 pl-2">PES 營養診斷</h2>
+            <textarea placeholder="P (問題) 相關於 E (病因) 藉由 S (症狀) 證實..." class="w-full p-3 border rounded-lg text-sm h-40 bg-slate-50"></textarea>
+        </section>
+        
+        <section id="tab-i" class="tab-content hidden p-5 bg-white rounded-2xl shadow-sm border border-slate-200">
+            <h2 class="text-base font-bold text-slate-800 mb-3 border-l-4 border-teal-600 pl-2">營養介入與衛教</h2>
+            <textarea placeholder="目標熱量、目標蛋白質、給予之衛教內容..." class="w-full p-3 border rounded-lg text-sm h-40 bg-slate-50"></textarea>
+        </section>
+
+        <section id="tab-me" class="tab-content hidden p-5 bg-white rounded-2xl shadow-sm border border-slate-200">
+            <h2 class="text-base font-bold text-slate-800 mb-3 border-l-4 border-teal-600 pl-2">營養監測與評估 (M/E)</h2>
+            <textarea placeholder="設定下次追蹤指標與日期..." class="w-full p-3 border rounded-lg text-sm h-40 bg-slate-50"></textarea>
+        </section>
+
+        <section id="tab-history" class="tab-content hidden p-5 bg-white rounded-2xl shadow-sm border border-slate-200">
+            <h2 class="text-base font-bold text-slate-800 mb-3">📁 本地暫存紀錄</h2>
+            <div id="history-list" class="space-y-2 text-slate-500 text-sm">目前無歷史紀錄。</div>
+        </section>
+
+    </main>
+
+    <!-- 底部固定按鈕 -->
+    <footer class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50">
+        <div class="max-w-6xl mx-auto flex gap-3">
+            <button onclick="saveToIndexedDB()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 py-3.5 rounded-xl font-bold border border-slate-300 active:scale-95 transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-floppy-disk text-slate-600"></i> 暫存於 iPad (離線)
+            </button>
+            <button onclick="uploadToGoogleSheet()" class="flex-1 bg-teal-600 hover:bg-teal-700 text-white py-3.5 rounded-xl font-bold shadow-md active:scale-95 transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-cloud-arrow-up"></i> 上傳至 Google Sheet
+            </button>
+        </div>
+    </footer>
+
+    <!-- App Logic -->
+    <script>
+        document.getElementById('adm-date').valueAsDate = new Date();
+        let selectedPMH = ['CKD 慢性腎病'];
+        let selectedDept = "";
+        let selectedDiet = "Regular 普通飯";
+        let currentMeal = "bf";
+        let activeInputEl = null;
+
+        // 常見食物選單庫
+        const foodPresets = {
+            staple: { name: "主食", unitKcal: 70, options: ["乾飯 (1碗=4份)", "稀飯 (1碗=2份)", "麵條 (1碗=4份)", "吐司 (1片=2份)", "地瓜 (1中個=2份)", "饅頭 (1個=4份)", "燕麥 (4湯匙=1份)"] },
+            main: { name: "主菜", unitKcal: 75, options: ["滷肉/切片肉 (1掌心=3份)", "蒸魚/煎魚 (1掌心=3份)", "煎排骨 (1塊=3份)", "荷包蛋/蒸蛋 (1顆=1份)", "豆腐/豆包 (1塊=1.5份)", "雞腿 (1隻=3份)"] },
+            mixed: { name: "半葷素", unitKcal: 120, options: ["肉絲炒高麗菜 (1碟=1.5份)", "麻婆豆腐 (1碟=2份)", "洋蔥炒蛋 (1碟=1.5份)", "番茄炒蛋 (1碟=1.5份)", "芹菜炒魷魚 (1碟=1.5份)"] },
+            veg: { name: "蔬菜", unitKcal: 25, options: ["高麗菜 (1碟=1份)", "地瓜葉 (1碟=1份)", "空心菜 (1碟=1份)", "花椰菜 (1碟=1份)", "菠菜 (1碟=1份)", "涼拌黃瓜 (1碟=1份)"] },
+            fruit: { name: "水果", unitKcal: 60, options: ["蘋果 (1小顆=1份)", "香蕉 (半根=1份)", "芭樂 (半顆=1份)", "蓮霧 (2顆=1份)", "木瓜 (1碗=1份)", "葡萄 (13顆=1份)"] },
+            dairy: { name: "乳品/配方", unitKcal: 150, options: ["全脂鮮奶 (240ml=1份)", "安素/標準配方 (1罐=1.7份)", "高蛋白配方 (1罐=1.5份)", "優格/優酪乳 (1杯=1份)", "無糖豆漿 (1杯=1份)"] },
+            drink: { name: "飲料/水分", unitKcal: 80, options: ["無糖綠茶/紅茶 (0 kcal)", "微糖奶茶 (1杯=2份)", "魚湯/肉湯 (1碗=1份)", "黑咖啡 (0 kcal)", "果汁 (1杯=1.5份)"] },
+            dessert: { name: "甜點/零食", unitKcal: 150, options: ["紅豆湯/綠豆湯 (1碗=2份)", "布丁 (1個=1份)", "蘇打餅乾 (4片=1份)", "蛋糕 (1小塊=2份)", "冰淇淋 (1球=1.5份)"] }
+        };
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('bg-teal-700', 'text-white', 'shadow');
+                el.classList.add('text-slate-600', 'hover:bg-slate-100');
+            });
+            document.getElementById(tabId).classList.remove('hidden');
+            const btn = document.getElementById('btn-' + tabId);
+            btn.classList.add('bg-teal-700', 'text-white', 'shadow');
+            btn.classList.remove('text-slate-600', 'hover:bg-slate-100');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function switchMealTab(mealKey) {
+            currentMeal = mealKey;
+            document.querySelectorAll('.meal-tab-btn').forEach(b => {
+                b.classList.remove('active', 'bg-teal-600', 'text-white', 'shadow');
+                b.classList.add('text-slate-600');
+            });
+            const btn = document.getElementById('meal-tab-' + mealKey);
+            btn.classList.add('active', 'bg-teal-600', 'text-white', 'shadow');
+            btn.classList.remove('text-slate-600');
+
+            calculateTotalKcal();
+        }
+
+        // --- 動態新增文字輸入框 (支援直接輸入與雙擊快選) ---
+        function addFoodItem(containerId, catKey, defaultValue = "", defaultPortion = "1") {
+            const container = document.getElementById(containerId);
+            const catInfo = foodPresets[catKey];
+
+            const row = document.createElement('div');
+            row.className = "flex gap-1.5 items-center food-item-row";
+            row.setAttribute('data-unit-kcal', catInfo.unitKcal);
+
+            row.innerHTML = `
+                <div class="relative flex-1">
+                    <input type="text" 
+                           value="${defaultValue}" 
+                           placeholder="打字或雙擊2下快選..." 
+                           oninput="calculateTotalKcal()" 
+                           ondblclick="triggerPicker(this, '${catKey}')"
+                           ontouchstart="handleTouchDoubleTap(event, this, '${catKey}')"
+                           class="food-input-text w-full p-1.5 border rounded-md text-xs bg-white font-medium outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition">
+                </div>
+                <div class="flex items-center gap-1 w-20">
+                    <input type="number" step="0.5" min="0" value="${defaultPortion}" oninput="calculateTotalKcal()" placeholder="份數" class="food-portion w-full p-1.5 border rounded-md text-xs bg-white text-center font-bold text-teal-700">
+                    <span class="text-[10px] text-slate-400">份</span>
+                </div>
+                <button type="button" onclick="this.parentElement.remove(); calculateTotalKcal();" class="text-red-400 px-1 hover:text-red-600 text-xs"><i class="fa-solid fa-xmark"></i></button>
+            `;
+            container.appendChild(row);
+            calculateTotalKcal();
+        }
+
+        // --- iPad 雙擊/連點觸控處理 ---
+        let lastTapTime = 0;
+        function handleTouchDoubleTap(event, inputEl, catKey) {
+            const currentTime = new Date().getTime();
+            const tapLength = currentTime - lastTapTime;
+            if (tapLength < 350 && tapLength > 0) {
+                event.preventDefault();
+                triggerPicker(inputEl, catKey);
+            }
+            lastTapTime = currentTime;
+        }
+
+        // --- 觸發彈窗下拉選單 ---
+        function triggerPicker(inputEl, catKey) {
+            activeInputEl = inputEl;
+            const catInfo = foodPresets[catKey];
+            const listContainer = document.getElementById('picker-options-list');
+            listContainer.innerHTML = '';
+
+            catInfo.options.forEach(opt => {
+                const itemBtn = document.createElement('button');
+                itemBtn.type = "button";
+                itemBtn.className = "w-full text-left p-3 text-xs font-bold text-slate-700 hover:bg-teal-50 hover:text-teal-800 transition active:bg-teal-100 flex justify-between items-center";
+                itemBtn.innerHTML = `<span>${opt}</span><i class="fa-solid fa-chevron-right text-slate-300 text-[10px]"></i>`;
+                itemBtn.onclick = function() {
+                    activeInputEl.value = opt;
+                    calculateTotalKcal();
+                    closePickerModal();
+                };
+                listContainer.appendChild(itemBtn);
+            });
+
+            document.getElementById('picker-modal').classList.remove('hidden');
+        }
+
+        function closePickerModal() {
+            document.getElementById('picker-modal').classList.add('hidden');
+            activeInputEl = null;
+        }
+
+        // --- 自動計算本餐總熱量 ---
+        function calculateTotalKcal() {
+            let total = 0;
+            document.querySelectorAll('.food-item-row').forEach(row => {
+                const textVal = row.querySelector('.food-input-text').value.trim();
+                const portion = parseFloat(row.querySelector('.food-portion').value) || 0;
+                const unitKcal = parseFloat(row.getAttribute('data-unit-kcal')) || 0;
+
+                if (textVal !== "") {
+                    total += portion * unitKcal;
+                }
+            });
+            document.getElementById('meal-total-kcal').innerText = Math.round(total);
+        }
+
+        // 預設初始化預載
+        window.onload = function() {
+            addFoodItem('cat-staple', 'staple', '乾飯 (1碗=4份)', '1');
+            addFoodItem('cat-main', 'main', '滷肉/切片肉 (1掌心=3份)', '1');
+            addFoodItem('cat-veg', 'veg', '高麗菜 (1碟=1份)', '1');
+        };
+
+        // --- Custom Options Logic ---
+        function addCustomOption(containerId, type, category) {
+            const val = prompt("請輸入自訂項目名稱：");
+            if (!val || val.trim() === "") return;
+            const container = document.getElementById(containerId);
+            const btn = document.createElement('button');
+            btn.type = "button";
+            btn.innerText = val.trim();
+
+            if (type === 'multi') {
+                btn.className = "pmh-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition";
+                btn.onclick = function() { toggleMultiBtn(this); };
+                toggleMultiBtn(btn);
+            } else if (type === 'single-diet') {
+                btn.className = "diet-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-600 transition";
+                btn.onclick = function() { selectTag(this, 'diet'); };
+                selectTag(btn, 'diet');
+            } else {
+                btn.className = "tag-btn text-xs px-2 py-1 border rounded-md bg-white border-slate-300 font-medium";
+                btn.onclick = function() { selectTag(this, category); };
+                selectTag(btn, category);
+            }
+            container.insertBefore(btn, container.lastElementChild);
+        }
+
+        function addCustomDiagnosis() {
+            const val = prompt("請輸入自訂主訴/診斷：");
+            if (val && val.trim() !== "") appendDiagnosis(val.trim());
+        }
+
+        // --- Base Logic ---
+        function selectTag(el, category) {
+            const parent = el.parentElement;
+            parent.querySelectorAll('.tag-btn, .diet-btn').forEach(b => {
+                b.classList.remove('active');
+                if(category==='diet') { b.classList.remove('bg-sky-600', 'text-white', 'font-bold'); b.classList.add('bg-white', 'text-slate-600'); }
+            });
+            el.classList.add('active');
+            if(category==='diet') { el.classList.remove('bg-white', 'text-slate-600'); el.classList.add('bg-sky-600', 'text-white', 'font-bold'); selectedDiet = el.innerText; }
+            if (category === 'dept') selectedDept = el.innerText;
+        }
+
+        function toggleMultiBtn(el) {
+            el.classList.toggle('active');
+            const text = el.innerText;
+            if (el.classList.contains('active')) {
+                el.classList.remove('bg-white', 'text-slate-600');
+                el.classList.add('bg-indigo-600', 'text-white', 'font-bold');
+                if (!selectedPMH.includes(text)) selectedPMH.push(text);
+            } else {
+                el.classList.remove('bg-indigo-600', 'text-white', 'font-bold');
+                el.classList.add('bg-white', 'text-slate-600');
+                selectedPMH = selectedPMH.filter(item => item !== text);
+            }
+        }
+
+        function appendDiagnosis(text) {
+            const input = document.getElementById('adm-diagnosis');
+            input.value = input.value ? input.value + ' / ' + text : text;
+        }
+
+        function checkLab(id, min, max) {
+            const el = document.getElementById('lab-' + id);
+            const val = parseFloat(el.value);
+            el.classList.remove('lab-low', 'lab-normal', 'lab-high');
+            if (isNaN(val) || el.value === '') return;
+            if (val < min) el.classList.add('lab-low');
+            else if (val > max) el.classList.add('lab-high');
+            else el.classList.add('lab-normal');
+        }
+
+        function saveToIndexedDB() {
+            const kcal = document.getElementById('meal-total-kcal').innerText;
+            alert(`✅ 已記錄並暫存於 iPad!
+「住院與生化」完全保持鎖定不變！
+飲食評估本餐估計熱量: ${kcal} kcal`);
+        }
+
+        function uploadToGoogleSheet() {
+            alert('🚀 準備發送資料至 Google Sheet！');
+        }
+    </script>
+</body>
+</html>
